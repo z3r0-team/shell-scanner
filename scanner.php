@@ -13,7 +13,7 @@ function scanDirForKeywords($dir, &$results, $depth = 0, $maxDepth = 10) {
 
     if ($depth > $maxDepth) return;
 
-    $extPattern = '/\.(php|phtml|php5|php7|shtml)$/i';
+    $extPattern = '/\.(php|phtml|php5|php7|shtml|inc|phar)$/i';
 
     if (!is_dir($dir)) return;
 
