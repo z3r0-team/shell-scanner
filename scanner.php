@@ -201,7 +201,7 @@ tbody td { padding: 8px 10px; vertical-align: middle; word-wrap: break-word; }
 </style>
 </head>
 <body>
-<header><h1>PHP Malware Scanner</h1></header>
+<header><h1>z3r0-team!</h1></header>
 <div class="breadcrumb"></div>
 <main>
     <div class="toolbar">
@@ -212,7 +212,7 @@ tbody td { padding: 8px 10px; vertical-align: middle; word-wrap: break-word; }
             <tr>
                 <th><input type="checkbox" id="select-all"></th>
                 <th>File Path</th>
-                <th>Deteksi</th>
+                <th>Detected</th>
                 <th>Size</th>
                 <th>Permissions</th>
                 <th>Status</th>
