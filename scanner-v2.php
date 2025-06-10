@@ -5,18 +5,22 @@ header('X-Robots-Tag: noindex, nofollow', true);
 @ignore_user_abort(true);
 date_default_timezone_set('Asia/Jakarta');
 
-$file_extensions = ['php', 'phtml', 'pht', 'php3', 'php4', 'php5', 'php7', 'phps', 'phar', 'ini', 'htaccess'];
+$file_extensions = ['php', 'phtml', 'pht', 'php3', 'php4', 'php5', 'php7', 'phps', 'phar', 'ini', 'htaccess', 'env', 'bak', 'old', 'sh'];
 $signatures = [
-    'HIGH' => [
-        'Shell/Backdoor' => ['/\b(c99|r57|b374k|wso|webshell|IndoXploit)\b/i', '/`\s*\$_(GET|POST|REQUEST)\[\w+\]\s*`/i'],
-        'Code Obfuscation' => ['/\beval\s*\(\s*base64_decode\s*\(/i', '/\beval\s*\(\s*gzinflate\s*\(/i', '/\beval\s*\(\s*(gzuncompress|gzdecode|str_rot13)\s*\(/i'],
-        'Callback/Dynamic Functions' => ['/\b(array_map|array_filter|call_user_func)\s*\(\s*["\'](assert|eval|system|exec|passthru)["\']/i', '/\$\w{6,}\s*\(\s*\$_(GET|POST|REQUEST|COOKIE)\s*\[/i', '/preg_replace\s*\(\s*["\'].*["\']\s*e\s*,/is', '/\b(assert)\s*\(\s*\$_(GET|POST|REQUEST)\s*\[/i'],
+    'CRITICAL' => [
+        'Shell/Backdoor' => ['/\b(c99|r57|b374k|wso|webshell|IndoXploit|An0n_sHeLL|IndoSec)\b/i', '/\b(shell_exec|passthru|system|popen)\s*\(\s*\$_(GET|POST|REQUEST)/i', '/`\s*\$_(GET|POST|REQUEST)\[\w+\]\s*`/i'],
+        'Code Obfuscation' => ['/\beval\s*(?:\/\*.*?\*\/)?\s*\(\s*(?:\/\*.*?\*\/)?\s*base64_decode/is', '/\beval\s*(?:\/\*.*?\*\/)?\s*\(\s*(?:\/\*.*?\*\/)?\s*gzinflate/is', '/\beval\s*\(\s*hex2bin\s*\(/i', '/preg_replace\s*\(\s*["\'].*["\']\s*e\s*,/is'],
+        'Cryptominer' => ['/\b(coin-hive|coinhive|minero|cryptonight|stratum\+tcp)\b/i', '/(Monero|nanopool|supportxmr)/i']
     ],
-    'MEDIUM' => [
-        'Suspicious Execution' => ['/\b(shell_exec|passthru|system|popen|pcntl_exec|proc_open)\s*\(/i'],
-        'Remote Execution' => ['/\b(curl_exec|fsockopen|pfsockopen|stream_socket_client)\s*\(/i', '/(include|require)\s*\(?\s*\$_(GET|POST|REQUEST)\s*\[/i', '/file_get_contents\s*\(\s*["\'](http|ftp)s?:\/\//i'],
-        'Risky Functions' => ['/\b(symlink|link)\s*\(/i', '/\b(ini_set|set_time_limit|php_uname)\s*\(/i', '/\b(chmod|chown|chgrp)\s*\(\s*\$_(GET|POST|REQUEST)\s*\[/i'],
-        'Info/Config Stealers' => ['/fopen\s*\(\s*["\'].*(wp-config|configuration|settings)\.php["\']\s*,\s*["\']r["\']\s*\)/i', '/shell_exec\s*\(\s*["\']mysqldump/i'],
+    'HIGH' => [
+        'Remote Execution' => ['/\b(curl_exec|fsockopen|pfsockopen|stream_socket_client)\s*\(/i', '/(include|require|readfile)\s*\(?\s*["\'](http|ftp)s?:\/\//i'],
+        'Callback/Dynamic Functions' => ['/\b(array_map|array_filter|call_user_func)\s*\(\s*["\'](assert|eval|system|exec|passthru)["\']/i', '/\$\w{6,}\s*\(\s*\$_(GET|POST|REQUEST|COOKIE)\s*\[/i', '/\b(assert)\s*\(\s*\$_(GET|POST|REQUEST)\s*\[/i', '/\bcreate_function\s*\(/i'],
+        'Info/Config Stealers' => ['/fopen\s*\(\s*["\'].*(wp-config|configuration|settings|passwd)\.php["\']\s*,\s*["\']r["\']\s*\)/i', '/shell_exec\s*\(\s*["\'](mysqldump|cat\s+\/etc\/passwd)["\']/i'],
+        'Ransomware/File Alteration' => ['/\brename\s*\(\s*\$file\s*,\s*\$file\s*\.\s*["\'](locked|encrypted|crypted)["\']\s*\)/i', '/(README_FOR_DECRYPT|DECRYPT_INSTRUCTIONS)/i']
+    ],
+    'WARNING' => [
+        'Suspicious & Risky Functions' => ['/\b(symlink|link|pcntl_exec|proc_open)\s*\(/i', '/\b(ini_set|set_time_limit|php_uname|error_reporting)\s*\(\s*0\s*\)/i', '/@\s*(file_get_contents|include|require|eval|system|unlink|fopen|chmod)\s*\(/i', '/\b(chmod|chown|chgrp)\s*\(\s*\$_(GET|POST|REQUEST)\s*\[/i'],
+        'Evasive Obfuscation' => ['/\beval\s*\(\s*["\'].*["\']\s*\.\s*["\'].*["\']\s*\)/i', '/\beval\s*\(.*?pack\s*\(/is'],
         'WordPress Specific' => ['/\$wpdb->query\s*\(\s*\$_(GET|POST|REQUEST)\s*\[/i', '/php_value\s+auto_prepend_file/i', '/AddType\s+application\/x-httpd-php\s+\.(jpg|png|gif)/i']
     ]
 ];
@@ -28,30 +32,27 @@ function validate_path($path) {
     return $real_path;
 }
 
+function make_accessible(&$path, &$log) {
+    if (is_readable($path)) return true;
+    $perms = is_dir($path) ? 0755 : 0644;
+    if (@chmod($path, $perms)) {
+        clearstatcache();
+        if (is_readable($path)) { $log[] = "Permissions adjusted for: " . htmlspecialchars($path); return true; }
+    }
+    $log[] = "Failed to adjust permissions for: " . htmlspecialchars($path);
+    return false;
+}
+
 function format_size($bytes) {
     if ($bytes >= 1048576) return number_format($bytes / 1048576, 2) . ' MB';
     if ($bytes >= 1024) return number_format($bytes / 1024, 2) . ' KB';
     return $bytes . ' bytes';
 }
 
-function is_function_enabled($func) {
-    $disabled = explode(',', ini_get('disable_functions'));
-    return !in_array(trim($func), array_map('trim', $disabled));
-}
-
-$action = $_REQUEST['action'] ?? '';
-
-if ($action === 'serve_file') {
-    header('Content-Type: text/plain');
-    $file_path = base64_decode($_GET['path'] ?? '');
-    $validated_path = validate_path($file_path);
-    if (!$validated_path || !is_readable($validated_path)) die('ERROR: File not found or not readable.');
-    echo htmlspecialchars(file_get_contents($validated_path));
-    exit;
-}
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
     $_SESSION['op_log'] = [];
+
     if ($action === 'view_file') {
         header('Content-Type: text/plain');
         $file_path = base64_decode($_POST['path'] ?? '');
@@ -60,6 +61,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo file_get_contents($validated_path);
         exit;
     }
+
+    if ($action === 'view_processes') {
+        header('Content-Type: text/plain');
+        $output = 'Process command execution is disabled on this server.';
+        if (function_exists('shell_exec')) {
+            $output = @shell_exec('ps aux');
+        } elseif (function_exists('exec')) {
+            @exec('ps aux', $output_array);
+            $output = implode("\n", $output_array);
+        } elseif (function_exists('passthru')) {
+            ob_start();
+            @passthru('ps aux');
+            $output = ob_get_clean();
+        }
+        echo empty(trim($output)) ? 'Could not retrieve process list. Function might be disabled or restricted.' : $output;
+        exit;
+    }
+
     if ($action === 'delete_files') {
         $files_to_delete = $_POST['files_to_delete'] ?? [];
         $deleted_count = 0; $failed_count = 0;
@@ -77,6 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: " . $_SERVER['PHP_SELF']);
         exit;
     }
+
     if ($action === 'create_htaccess') {
         $dir_path = $_POST['dir_path'] ?? '';
         $validated_dir = validate_path($dir_path);
@@ -102,46 +122,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 $scan_in_progress = ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['start_scan']));
-$view_processes_request = ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'view_processes');
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="robots" content="noindex, nofollow">
-    <title>Security Analyzer v8.0</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Security Analyzer v9.0</title>
     <style>
-        :root { --bg-color: #f8f9fa; --text-color: #212529; --primary-color: #0d6efd; --border-color: #dee2e6; --card-bg: #fff; --red-color: #dc3545; --orange-color: #fd7e14; --muted-color: #6c757d; }
-        body { background-color: var(--bg-color); color: var(--text-color); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 2rem; font-size: 16px; line-height: 1.5; }
+        :root {
+            --bg-color: #f8f9fa; --text-color: #212529; --primary-color: #0d6efd; --border-color: #dee2e6;
+            --card-bg: #fff; --red-color: #dc3545; --orange-color: #fd7e14; --blue-color: var(--primary-color);
+            --green-color: #198754; --muted-color: #6c757d;
+        }
+        body {
+            background-color: var(--bg-color); color: var(--text-color); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0; padding: 2rem; font-size: 16px; line-height: 1.5;
+        }
         .container { max-width: 1200px; margin: 0 auto; }
         h1, h2 { border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; }
         h1 { text-align: center; border-bottom: none; }
         .author { font-size: 0.8rem; color: var(--muted-color); text-align: center; margin-top: -1rem; margin-bottom: 2rem; }
-        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; }
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 1.5rem; }
         .card { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 0.375rem; padding: 1.5rem; box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,.075); }
         .form-group { margin-bottom: 1rem; }
         .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
         .form-control { display: block; width: 100%; padding: 0.5rem 1rem; font-size: 1rem; font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; color: var(--text-color); background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 0.375rem; transition: border-color .15s ease-in-out,box-shadow .15s ease-in-out; box-sizing: border-box;}
         .form-text { font-size: .875em; color: var(--muted-color); }
         .btn { display: inline-block; font-weight: 600; line-height: 1.5; color: #fff; text-align: center; cursor: pointer; user-select: none; background-color: var(--primary-color); border: 1px solid var(--primary-color); padding: 0.5rem 1rem; font-size: 1rem; border-radius: 0.375rem; transition: all .15s ease-in-out; }
-        .btn:hover { background-color: #0b5ed7; }
+        .btn:hover { opacity: 0.9; }
         .btn-danger { background-color: var(--red-color); border-color: var(--red-color); }
-        .btn-danger:hover { background-color: #bb2d3b; }
-        .btn-warning { background-color: var(--orange-color); border-color: var(--orange-color); }
-        .btn-warning:hover { background-color: #d36a10; }
-        .btn-subtle { background-color: #6c757d; border-color: #6c757d; } .btn-subtle:hover { background-color: #5c636a; }
+        .btn-subtle { background-color: #6c757d; border-color: #6c757d; }
         .flash { padding: 1rem; margin-bottom: 1rem; border: 1px solid transparent; border-radius: 0.375rem; }
         .flash-success { color: #0f5132; background-color: #d1e7dd; border-color: #badbcc; }
         .flash-danger { color: #842029; background-color: #f8d7da; border-color: #f5c2c7; }
         .results-list { list-style: none; padding: 0; }
-        .results-list li { border-left: 5px solid var(--border-color); background-color: var(--card-bg); border-top: 1px solid var(--border-color); border-right: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); border-radius: 0 4px 4px 0; margin-bottom: 1rem; padding: 1rem; display: flex; flex-wrap: wrap; gap: 1rem; }
+        .results-list li { border-left-width: 5px; border-left-style: solid; background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 4px; margin-bottom: 1rem; padding: 1rem; display: flex; flex-wrap: wrap; gap: 1rem; }
+        .threat-CRITICAL { border-left-color: var(--red-color); }
+        .threat-HIGH { border-left-color: var(--orange-color); }
+        .threat-WARNING { border-left-color: var(--blue-color); }
         .results-list .file-details { flex-grow: 1; word-break: break-all; }
-        .results-list .file-path { font-weight: 600; }
-        .results-list .file-path a { color: var(--text-color); text-decoration: none; }
-        .results-list .file-path a:hover { text-decoration: underline; color: var(--primary-color); }
+        .results-list .file-path a { font-weight: 600; color: var(--text-color); text-decoration: none; }
+        .results-list .file-path a:hover { text-decoration: underline; }
         .results-list .reason { font-size: 0.9rem; font-weight: 600; }
+        .threat-CRITICAL .reason { color: var(--red-color); }
+        .threat-HIGH .reason { color: var(--orange-color); }
+        .threat-WARNING .reason { color: var(--blue-color); }
         .results-list .meta-info { font-size: 0.85rem; color: var(--muted-color); display: flex; gap: 1.5rem; margin-top: 0.5rem; }
-        .threat-HIGH { border-left-color: var(--red-color); } .threat-HIGH .reason { color: var(--red-color); }
-        .threat-MEDIUM { border-left-color: var(--orange-color); } .threat-MEDIUM .reason { color: var(--orange-color); }
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); }
         .modal-content { position: relative; background-color: #fefefe; margin: 5% auto; padding: 20px; border: 1px solid #888; width: 80%; border-radius: 0.3rem; }
         .modal-body pre { background-color: #f8f9fa; padding: 1rem; border-radius: 0.3rem; max-height: 70vh; overflow-y: auto; font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
@@ -149,7 +177,7 @@ $view_processes_request = ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 
 </head>
 <body>
     <div class="container">
-        <h1>Security Analyzer <span style="color:var(--primary-color)">v8.0</span></h1>
+        <h1>Security Analyzer <span style="color:var(--primary-color)">v9.0</span></h1>
         <p class="author">by z3r0-team! x #CianjurHacktivist</p>
 
         <?php if (isset($_SESSION['flash_message'])): ?>
@@ -159,41 +187,43 @@ $view_processes_request = ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 
         <div class="dashboard">
             <div class="card">
                 <h2>🔍 Start New Scan</h2>
-                <form method="post" action=""><input type="hidden" name="start_scan" value="1">
-                    <div class="form-group"><label for="scan_dir">Target Directory</label><input type="text" id="scan_dir" name="scan_dir" class="form-control" value="<?php echo htmlspecialchars(realpath('.')); ?>"></div>
+                <form method="post" action="">
+                    <input type="hidden" name="start_scan" value="1">
+                    <div class="form-group">
+                        <label for="scan_dir">Target Directory</label>
+                        <input type="text" id="scan_dir" name="scan_dir" class="form-control" value="<?php echo htmlspecialchars(realpath('.')); ?>">
+                    </div>
                     <button type="submit" class="btn">Initiate Scan</button>
                 </form>
             </div>
             <div class="card">
                 <h2>🛡️ Secure Directory</h2>
-                <form method="post" action=""><input type="hidden" name="action" value="create_htaccess">
-                    <div class="form-group"><label for="dir_path">Directory to protect</label><input type="text" id="dir_path" name="dir_path" class="form-control" placeholder="/path/to/uploads"></div>
-                    <div class="form-group"><label for="whitelist_files">Whitelist Files</label><input type="text" id="whitelist_files" name="whitelist_files" class="form-control" placeholder="index.php, admin-ajax.php"><div class="form-text">Pisahkan dengan koma. Kosongkan jika tidak ada.</div></div>
+                <form method="post" action="">
+                    <input type="hidden" name="action" value="create_htaccess">
+                    <div class="form-group">
+                        <label for="dir_path">Directory to protect</label>
+                        <input type="text" id="dir_path" name="dir_path" class="form-control" placeholder="/home/user/public_html/uploads">
+                    </div>
+                    <div class="form-group">
+                        <label for="whitelist_files">Whitelist Files (Optional)</label>
+                        <input type="text" id="whitelist_files" name="whitelist_files" class="form-control" placeholder="index.php, admin-ajax.php">
+                        <div class="form-text">Pisahkan nama file dengan koma.</div>
+                    </div>
                     <button type="submit" class="btn">Create .htaccess</button>
                 </form>
             </div>
             <div class="card">
-                <h2>⚙️ View Running Processes</h2>
-                <form method="post" action=""><input type="hidden" name="action" value="view_processes">
-                    <div class="form-text">Fitur ini menjalankan `ps aux` untuk melihat proses aktif. Mungkin dinonaktifkan oleh hosting Anda.</div>
-                    <button type="submit" class="btn btn-warning" style="margin-top:1rem;">View Processes</button>
-                </form>
+                <h2>⚙️ System Tools</h2>
+                <p class="form-text">Lihat proses yang berjalan untuk mendeteksi skrip latar belakang yang mencurigakan.</p>
+                <button type="button" class="btn view-processes-btn">View Running Processes</button>
             </div>
         </div>
 
-        <?php if ($view_processes_request): ?>
-            <div class="card" style="margin-top: 2rem;"><h2>Running Processes</h2><div class="modal-body"><pre><?php
-            if (is_function_enabled('shell_exec')) {
-                echo htmlspecialchars(shell_exec('ps aux'));
-            } else {
-                echo 'ERROR: `shell_exec` function is disabled on this server.';
-            }
-            ?></pre></div></div>
-        <?php endif; ?>
-
         <?php if ($scan_in_progress): ?>
-        <div class="card" style="margin-top: 2rem;"><h2>Scan Results</h2>
-            <form method="post" action=""><input type="hidden" name="action" value="delete_files">
+        <div class="card" style="margin-top: 2rem;">
+            <h2>Scan Results</h2>
+            <form method="post" action="">
+                <input type="hidden" name="action" value="delete_files">
                 <ul class="results-list">
                     <?php
                     $scan_path = validate_path($_POST['scan_dir']);
@@ -203,35 +233,45 @@ $view_processes_request = ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 
                             $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($scan_path, FilesystemIterator::UNIX_PATHS), RecursiveIteratorIterator::SELF_FIRST);
                             foreach ($iterator as $path => $file) {
                                 if ($file->getBasename() === '.' || $file->getBasename() === '..') continue;
-                                if (!$file->isReadable() && !make_accessible($path, $_SESSION['op_log'])) continue;
+                                if (!$file->isReadable()) { if (!make_accessible($path, $_SESSION['op_log'])) continue; }
                                 if ($file->isFile() && in_array(strtolower($file->getExtension()), $file_extensions)) {
                                     $file_content = @file_get_contents($path);
                                     if ($file_content === false) continue;
-                                    $findings = [];
+                                    $all_findings = []; $highest_threat_level = 'NONE'; $level_map = ['CRITICAL' => 3, 'HIGH' => 2, 'WARNING' => 1, 'NONE' => 0];
                                     foreach ($signatures as $level => $categories) {
                                         foreach ($categories as $category => $patterns) {
-                                            foreach ($patterns as $pattern) { if (preg_match($pattern, $file_content)) { $findings[$level][] = $category; } }
+                                            foreach ($patterns as $pattern) {
+                                                if (preg_match($pattern, $file_content)) {
+                                                    $all_findings[$level][] = $category;
+                                                    if ($level_map[$level] > $level_map[$highest_threat_level]) {
+                                                        $highest_threat_level = $level;
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
-                                    if (!empty($findings)) {
+                                    if (!empty($all_findings)) {
                                         $infected_files_count++;
-                                        $highest_threat = isset($findings['HIGH']) ? 'HIGH' : 'MEDIUM';
-                                        $all_reasons = array_unique(array_merge($findings['HIGH'] ?? [], $findings['MEDIUM'] ?? []));
                                         $b64_path = base64_encode($path);
+                                        $web_path = str_replace($_SERVER['DOCUMENT_ROOT'], '', $path);
+                                        $file_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]" . $web_path;
                     ?>
-                    <li class="threat-<?php echo $highest_threat; ?>">
+                    <li class="threat-<?php echo $highest_threat_level; ?>">
                         <input type="checkbox" name="files_to_delete[]" value="<?php echo $b64_path; ?>" style="margin: 0.5rem 1rem 0 0; transform: scale(1.5);">
                         <div class="file-details">
-                            <div class="file-path"><a href="?action=serve_file&path=<?php echo $b64_path; ?>" target="_blank"><?php echo htmlspecialchars($path); ?></a></div>
-                            <div class="reason">Threat: <?php echo htmlspecialchars(implode(', ', $all_reasons)); ?></div>
+                            <div class="file-path"><a href="<?php echo htmlspecialchars($file_url); ?>" target="_blank" title="Open file in new tab"><?php echo htmlspecialchars($path); ?></a></div>
+                            <div class="reason">LEVEL: <?php echo $highest_threat_level; ?> (Categories: <?php echo htmlspecialchars(implode(', ', array_unique($all_findings[$highest_threat_level]))); ?>)</div>
                             <div class="meta-info">
                                 <span>📅 Modified: <?php echo date("Y-m-d H:i:s", $file->getMTime()); ?></span>
                                 <span>💾 Size: <?php echo format_size($file->getSize()); ?></span>
                             </div>
                         </div>
-                        <button type="button" class="btn btn-subtle view-file-btn" data-path="<?php echo $b64_path; ?>">👀 View</button>
+                        <button type="button" class="btn btn-subtle view-file-btn" data-path="<?php echo $b64_path; ?>">👀 View Code</button>
                     </li>
-                    <?php } } }
+                    <?php
+                                    }
+                                }
+                            }
                         } catch (Exception $e) { $_SESSION['flash_message'] = "An error occurred: " . $e->getMessage(); }
                     } else { $_SESSION['flash_message'] = "Error: Invalid scan path."; }
                     if ($infected_files_count === 0) { echo "<p>✅ No suspicious files found.</p>"; }
@@ -245,22 +285,49 @@ $view_processes_request = ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 
         <?php endif; ?>
     </div>
 
-    <div id="fileViewerModal" class="modal"><div class="modal-content">
-        <span style="float:right; font-size: 28px; font-weight: bold; cursor: pointer;" onclick="document.getElementById('fileViewerModal').style.display='none'">&times;</span>
-        <h2>File Viewer</h2><div class="modal-body"><pre id="fileContent"></pre></div>
-    </div></div>
+    <div id="fileViewerModal" class="modal">
+        <div class="modal-content">
+            <span style="float:right; font-size: 28px; font-weight: bold; cursor: pointer;" class="close-modal-btn">&times;</span>
+            <h2 id="modalTitle">Viewer</h2>
+            <div class="modal-body"><pre id="modalContent"></pre></div>
+        </div>
+    </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            const modal = document.getElementById('fileViewerModal'), fileContentEl = document.getElementById('fileContent');
+            const modal = document.getElementById('fileViewerModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalContent = document.getElementById('modalContent');
+            
+            function closeModal() { modal.style.display = 'none'; }
+            document.querySelector('.close-modal-btn').onclick = closeModal;
+            window.onclick = (event) => { if (event.target == modal) { closeModal(); } };
+
             document.querySelectorAll('.view-file-btn').forEach(button => {
                 button.addEventListener('click', function() {
-                    fileContentEl.textContent = 'Loading...'; modal.style.display = 'block';
-                    fetch(window.location.href, { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'action=view_file&path=' + this.dataset.path })
-                    .then(r => r.text()).then(text => fileContentEl.textContent = text).catch(e => fileContentEl.textContent = 'Error: ' + e);
+                    modalTitle.textContent = 'File Content';
+                    modalContent.textContent = 'Loading...';
+                    modal.style.display = 'block';
+                    fetch(window.location.href, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                        body: 'action=view_file&path=' + this.dataset.path
+                    }).then(r => r.text()).then(text => modalContent.textContent = text)
+                      .catch(e => modalContent.textContent = 'Error: ' + e);
                 });
             });
-            window.onclick = (event) => { if (event.target == modal) modal.style.display = 'none'; };
+
+            document.querySelector('.view-processes-btn').addEventListener('click', function() {
+                modalTitle.textContent = 'Running Processes (ps aux)';
+                modalContent.textContent = 'Loading...';
+                modal.style.display = 'block';
+                fetch(window.location.href, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: 'action=view_processes'
+                }).then(r => r.text()).then(text => modalContent.textContent = text)
+                    .catch(e => modalContent.textContent = 'Error: ' + e);
+            });
         });
     </script>
 </body>
